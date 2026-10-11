@@ -15,9 +15,11 @@ func (m *MatchAnalyzer) OnMatchStart(e events.AnnouncementMatchStarted) {
 			continue
 		}
 
-		m.MatchData.Players[p.SteamID64] = &models.PlayerStats{
-			SteamID: p.SteamID64,
-			Name:    p.Name,
+		if m.MatchData.Players[p.SteamID64] == nil {
+			m.MatchData.Players[p.SteamID64] = &models.PlayerStats{
+				SteamID: p.SteamID64,
+				Name:    p.Name,
+			}
 		}
 	}
 }

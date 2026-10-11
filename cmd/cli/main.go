@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	caleDemo := "demos/demo_test.dem"
+	caleDemo := "demos/test_demo.dem"
 
 	// 1. Apelăm parserul și prindem datele
 	matchStats, err := parser.ParseDemo(caleDemo)
