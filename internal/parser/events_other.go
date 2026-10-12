@@ -7,7 +7,7 @@ import (
 	events "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/events"
 )
 
-func (m *MatchAnalyzer) OnChatMessage(e events.ChatMessage) {
+func (m *MatchAnalyzer) RegisterChatMessages(e events.ChatMessage) {
 
 	if e.Sender != nil && e.Sender.SteamID64 != 0 {
 		typeChat := "[Team]"

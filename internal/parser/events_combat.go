@@ -1,23 +1,30 @@
 package parser
 
 import (
+	"cs2-parser/internal/models"
+
 	events "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/events"
 )
 
-func (m *MatchAnalyzer) OnKill(e events.Kill) {
-	if m.isLive == false {
+func (m *MatchAnalyzer) UpdateScoreboardOnRoundEnd(_ events.FrameDone) {
+	if m.parser.GameState().IsWarmupPeriod() || !m.isLive {
 		return
 	}
 
-	if e.Victim != nil && e.Victim.SteamID64 != 0 {
-		m.MatchData.Players[e.Victim.SteamID64].Deaths++
-	}
+	for _, p := range m.parser.GameState().Participants().All() {
+		if p == nil || p.SteamID64 == 0 || p.Entity == nil {
+			continue
+		}
 
-	if e.Killer != nil && e.Killer.SteamID64 != 0 && e.Killer != e.Victim {
-		m.MatchData.Players[e.Killer.SteamID64].Kills++
-	}
+		if m.MatchData.Players[p.SteamID64] == nil {
+			m.MatchData.Players[p.SteamID64] = &models.PlayerStats{
+				SteamID: p.SteamID64,
+				Name:    p.Name,
+			}
+		}
 
-	if e.Assister != nil && e.Assister.SteamID64 != 0 {
-		m.MatchData.Players[e.Assister.SteamID64].Assists++
+		m.MatchData.Players[p.SteamID64].Kills = p.Kills()
+		m.MatchData.Players[p.SteamID64].Deaths = p.Deaths()
+		m.MatchData.Players[p.SteamID64].Assists = p.Assists()
 	}
 }

@@ -9,13 +9,13 @@ import (
 )
 
 func main() {
-	caleDemo := "demos/test_demo.dem"
+	demoPath := "demos/test_demo.dem"
 
-	matchStats, err := parser.ParseDemo(caleDemo)
+	matchStats, err := parser.ParseDemo(demoPath)
 	if err != nil {
 		log.Fatalf("Parsing error: %v", err)
 	}
 
-	jsonDate, err := json.MarshalIndent(matchStats, "", "  ")
-	fmt.Println(string(jsonDate))
+	jsonData, err := json.MarshalIndent(matchStats, "", "  ")
+	fmt.Println(string(jsonData))
 }

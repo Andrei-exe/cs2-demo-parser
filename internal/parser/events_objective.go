@@ -6,7 +6,7 @@ import (
 	events "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/events"
 )
 
-func (m *MatchAnalyzer) OnMatchStart(e events.AnnouncementMatchStarted) {
+func (m *MatchAnalyzer) InitializePlayersOnMatchStart(e events.AnnouncementMatchStarted) {
 	m.isLive = true
 
 	for _, p := range m.parser.GameState().Participants().Playing() {

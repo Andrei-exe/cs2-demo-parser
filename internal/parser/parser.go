@@ -23,9 +23,9 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 	err := dem.ParseFile(demoFilePath, func(p dem.Parser) error {
 		analyzer.parser = p
 
-		p.RegisterEventHandler(analyzer.OnMatchStart)
-		p.RegisterEventHandler(analyzer.OnKill)
-		p.RegisterEventHandler(analyzer.OnChatMessage)
+		p.RegisterEventHandler(analyzer.InitializePlayersOnMatchStart)
+		p.RegisterEventHandler(analyzer.UpdateScoreboardOnRoundEnd)
+		p.RegisterEventHandler(analyzer.RegisterChatMessages)
 
 		return nil
 	})
