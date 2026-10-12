@@ -24,7 +24,7 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 		analyzer.parser = p
 
 		p.RegisterEventHandler(analyzer.InitializePlayersOnMatchStart)
-		p.RegisterEventHandler(analyzer.UpdateScoreboardOnRoundEnd)
+		p.RegisterEventHandler(analyzer.OnKill)
 		p.RegisterEventHandler(analyzer.RegisterChatMessages)
 
 		return nil
@@ -35,4 +35,17 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 	}
 
 	return analyzer.MatchData, nil
+}
+
+func (m *MatchAnalyzer) EnsurePlayerIsRegistered(steamID uint64, name string) {
+	if steamID == 0 {
+		return
+	}
+
+	if m.MatchData.Players[steamID] == nil {
+		m.MatchData.Players[steamID] = &models.PlayerStats{
+			SteamID: steamID,
+			Name:    name,
+		}
+	}
 }

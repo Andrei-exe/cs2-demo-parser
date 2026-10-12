@@ -1,12 +1,10 @@
 package parser
 
 import (
-	"cs2-parser/internal/models"
-
 	events "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/events"
 )
 
-func (m *MatchAnalyzer) UpdateScoreboardOnRoundEnd(_ events.FrameDone) {
+func (m *MatchAnalyzer) SyncScore() {
 	if m.parser.GameState().IsWarmupPeriod() || !m.isLive {
 		return
 	}
@@ -16,15 +14,26 @@ func (m *MatchAnalyzer) UpdateScoreboardOnRoundEnd(_ events.FrameDone) {
 			continue
 		}
 
-		if m.MatchData.Players[p.SteamID64] == nil {
-			m.MatchData.Players[p.SteamID64] = &models.PlayerStats{
-				SteamID: p.SteamID64,
-				Name:    p.Name,
-			}
-		}
+		m.EnsurePlayerIsRegistered(p.SteamID64, p.Name)
 
 		m.MatchData.Players[p.SteamID64].Kills = p.Kills()
 		m.MatchData.Players[p.SteamID64].Deaths = p.Deaths()
 		m.MatchData.Players[p.SteamID64].Assists = p.Assists()
+	}
+}
+
+func (m *MatchAnalyzer) OnKill(e events.Kill) {
+	m.SyncScore()
+
+	if e.Victim != nil && e.Victim.SteamID64 != 0 {
+		m.MatchData.Players[e.Victim.SteamID64].Deaths++
+	}
+
+	if e.Killer != nil && e.Killer.SteamID64 != 0 && e.Killer != e.Victim {
+		m.MatchData.Players[e.Killer.SteamID64].Kills++
+	}
+
+	if e.Assister != nil && e.Assister.SteamID64 != 0 && e.AssistedFlash == false {
+		m.MatchData.Players[e.Assister.SteamID64].Assists++
 	}
 }

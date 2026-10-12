@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"cs2-parser/internal/models"
-
 	events "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/events"
 )
 
@@ -15,11 +13,6 @@ func (m *MatchAnalyzer) InitializePlayersOnMatchStart(e events.AnnouncementMatch
 			continue
 		}
 
-		if m.MatchData.Players[p.SteamID64] == nil {
-			m.MatchData.Players[p.SteamID64] = &models.PlayerStats{
-				SteamID: p.SteamID64,
-				Name:    p.Name,
-			}
-		}
+		m.EnsurePlayerIsRegistered(p.SteamID64, p.Name)
 	}
 }
