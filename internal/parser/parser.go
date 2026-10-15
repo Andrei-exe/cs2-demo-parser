@@ -4,6 +4,7 @@ import (
 	"cs2-parser/internal/models"
 
 	dem "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs"
+	msg "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/msg"
 )
 
 type MatchAnalyzer struct {
@@ -22,6 +23,10 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 
 	err := dem.ParseFile(demoFilePath, func(p dem.Parser) error {
 		analyzer.parser = p
+
+		p.RegisterNetMessageHandler(func(m *msg.CSVCMsg_ServerInfo) {
+			analyzer.MatchData.MapName = m.GetMapName()
+		})
 
 		p.RegisterEventHandler(analyzer.InitializePlayersOnMatchStart)
 		p.RegisterEventHandler(analyzer.OnKill)
