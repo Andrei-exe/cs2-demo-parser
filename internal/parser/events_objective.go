@@ -20,4 +20,5 @@ func (m *MatchAnalyzer) InitializePlayersOnMatchStart(e events.AnnouncementMatch
 // Fixes 1 tick delay and catches any last kills occuring in the round (not exit-frags)
 func (m *MatchAnalyzer) OnRoundEnd(_ events.RoundEnd) {
 	m.SyncScore()
+	m.SyncUtilityScore()
 }

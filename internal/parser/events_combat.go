@@ -27,9 +27,10 @@ func (m *MatchAnalyzer) SyncScore() {
 // Calls for scoreboard update and listens for exit-frags after RoundEnd is triggered
 func (m *MatchAnalyzer) OnKill(e events.Kill) {
 	m.SyncScore()
+	m.SyncUtilityScore()
 
-	if e.Killer.SteamID64 != 0 && e.Killer.Team != e.Victim.Team {
-		if e.IsHeadshot {
+	if e.Killer != nil && e.Victim != nil && e.Killer.SteamID64 != 0 {
+		if e.Killer.Team != e.Victim.Team && e.IsHeadshot {
 			m.EnsurePlayerIsRegistered(e.Killer.SteamID64, e.Killer.Name)
 			m.MatchData.Players[e.Killer.SteamID64].Headshots++
 		}

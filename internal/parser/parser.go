@@ -29,10 +29,15 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 			analyzer.MatchData.MapName = m.GetMapName()
 		})
 
+		// PlayerData-related handlers
 		p.RegisterEventHandler(analyzer.InitializePlayersOnMatchStart)
+
+		// Combat-related handlers
 		p.RegisterEventHandler(analyzer.OnKill)
-		p.RegisterEventHandler(analyzer.RegisterChatMessages)
 		p.RegisterEventHandler(analyzer.OnRoundEnd)
+
+		// Other-related handlers
+		p.RegisterEventHandler(analyzer.RegisterChatMessages)
 
 		return nil
 	})
@@ -43,6 +48,7 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 
 	// In case demo end abruptly after last round
 	analyzer.SyncScore()
+	analyzer.SyncUtilityScore()
 
 	for _, p := range analyzer.MatchData.Players {
 		if p.Kills > 0 && p.Headshots > 0 {
@@ -50,6 +56,9 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 			p.HeadshotPercentage = int(math.Round(percentage))
 		}
 	}
+
+	analyzer.MatchData.CTScore = analyzer.parser.GameState().TeamCounterTerrorists().Score()
+	analyzer.MatchData.TeroScore = analyzer.parser.GameState().TeamTerrorists().Score()
 
 	return analyzer.MatchData, nil
 }
