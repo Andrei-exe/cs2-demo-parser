@@ -9,7 +9,7 @@ A small Counter-Strike 2 demo parser written in Go and based on the [`demoinfocs
 - **Scoreboard:** Extracts Kills, Deaths, Assists, Damage, HS%, Utility Damage and Enemies Flashed. Ensures that events occuring during knife rounds or warmups are not counted towards the final score.
 - **Chat Logging:** Captures all `[ALL]` and `[TEAM]` chat messages sent during the match.
 - **JSON Output:** Structured output to terminal.
-- **API:** Service written using the [`fiber`](https://github.com/gofiber/fiber/v3) package to serve the frontend.
+- **API:** Service written using the [`fiber`](https://github.com/gofiber/fiber) package to serve the frontend.
 - **Web interface:** Basic web interface written in Vue that allows for uploading `.dem` files and displays a basic scoreboard with all the statistics received from the GO backend.
 
 ## Upcoming
