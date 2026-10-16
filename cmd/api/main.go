@@ -12,7 +12,7 @@ import (
 
 func main() {
 	app := fiber.New(fiber.Config{
-		BodyLimit: 300 * 1024 * 1024,
+		BodyLimit: 500 * 1024 * 1024,
 	})
 	app.Use(cors.New())
 
