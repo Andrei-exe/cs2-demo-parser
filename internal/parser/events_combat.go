@@ -4,6 +4,7 @@ import (
 	events "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/events"
 )
 
+// Extracts K/D/A from server memory (1 tick delay)
 func (m *MatchAnalyzer) SyncScore() {
 	if m.parser.GameState().IsWarmupPeriod() || !m.isLive {
 		return
@@ -19,21 +20,18 @@ func (m *MatchAnalyzer) SyncScore() {
 		m.MatchData.Players[p.SteamID64].Kills = p.Kills()
 		m.MatchData.Players[p.SteamID64].Deaths = p.Deaths()
 		m.MatchData.Players[p.SteamID64].Assists = p.Assists()
+		m.MatchData.Players[p.SteamID64].TotalDamage = p.TotalDamage()
 	}
 }
 
+// Calls for scoreboard update and listens for exit-frags after RoundEnd is triggered
 func (m *MatchAnalyzer) OnKill(e events.Kill) {
 	m.SyncScore()
 
-	if e.Victim != nil && e.Victim.SteamID64 != 0 {
-		m.MatchData.Players[e.Victim.SteamID64].Deaths++
-	}
-
-	if e.Killer != nil && e.Killer.SteamID64 != 0 && e.Killer != e.Victim {
-		m.MatchData.Players[e.Killer.SteamID64].Kills++
-	}
-
-	if e.Assister != nil && e.Assister.SteamID64 != 0 && e.AssistedFlash == false {
-		m.MatchData.Players[e.Assister.SteamID64].Assists++
+	if e.Killer.SteamID64 != 0 && e.Killer.Team != e.Victim.Team {
+		if e.IsHeadshot {
+			m.EnsurePlayerIsRegistered(e.Killer.SteamID64, e.Killer.Name)
+			m.MatchData.Players[e.Killer.SteamID64].Headshots++
+		}
 	}
 }
