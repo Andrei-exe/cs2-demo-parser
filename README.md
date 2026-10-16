@@ -11,7 +11,7 @@ A small Counter-Strike 2 demo parser written in Go and based on the [`demoinfocs
 - **JSON Output:** Structured output to terminal (for now).
 
 ## Upcoming
- In the immediate future I want to implement functionalities to process more information from a match (e.g. utiliy damage, enemies flashed etc.), display these statistics in a web interface and allow for uploading demo files from that web interface. Furthermore I'd like to implement a database connection to store statistics about players and also move the demo file storage there rather than locally.
+ In the immediate future I want to implement functionalities to process more information from a match, display these statistics in a web interface and allow for uploading demo files from that web interface. Furthermore, I'd like to implement a database connection to store statistics about players and also move the demo file storage there rather than locally.
 
 ## Instructions to Run
 1. Create a `demos` folder in the root of the directory and drop the `.dem` file inside
