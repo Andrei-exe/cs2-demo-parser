@@ -24,6 +24,7 @@ func main() {
 
 		os.MkdirAll("./uploads", os.ModePerm)
 		savePath := filepath.Join("./uploads", file.Filename)
+		defer os.Remove(savePath)
 
 		if err := c.SaveFile(file, savePath); err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": "Couldn't save demo locally"})
@@ -33,8 +34,6 @@ func main() {
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": "Parsing error: " + err.Error()})
 		}
-
-		os.Remove(savePath)
 
 		return c.JSON(matchData)
 	})

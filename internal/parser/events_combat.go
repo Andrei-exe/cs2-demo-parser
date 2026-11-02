@@ -29,6 +29,9 @@ func (m *MatchAnalyzer) OnKill(e events.Kill) {
 	m.SyncScore()
 	m.SyncUtilityScore()
 
+	if m.parser.GameState().IsWarmupPeriod() || !m.isLive {
+		return
+	}
 	if e.Killer != nil && e.Victim != nil && e.Killer.SteamID64 != 0 {
 		if e.Killer.Team != e.Victim.Team && e.IsHeadshot {
 			m.EnsurePlayerIsRegistered(e.Killer.SteamID64, e.Killer.Name)

@@ -1,6 +1,6 @@
 module cs2-parser
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/gofiber/fiber/v3 v3.6.1

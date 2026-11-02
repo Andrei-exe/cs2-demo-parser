@@ -8,7 +8,7 @@ type PlayerStats struct {
 	Deaths             int `json:"deaths"`
 	Assists            int `json:"assists"`
 	TotalDamage        int `json:"total_damage"`
-	Headshots          int `josn:"headshots"`
+	Headshots          int `json:"headshots"`
 	HeadshotPercentage int `json:"headshot_percentage"`
 	UtilityDamage      int `json:"utility_damage"`
 	EnemiesFlashed     int `json:"enemies_flashed"`
