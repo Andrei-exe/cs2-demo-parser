@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege: every job only needs to read the repo.
+# Applies to all jobs below unless a job overrides it.
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Backend
