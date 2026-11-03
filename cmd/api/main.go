@@ -1,6 +1,9 @@
 package main
 
 import (
+	"errors"
+	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -11,6 +14,10 @@ import (
 )
 
 func main() {
+	if err := os.MkdirAll("./uploads", os.ModePerm); err != nil {
+		log.Fatalf("Couldn't create uploads folder: %v", err)
+	}
+
 	app := fiber.New(fiber.Config{
 		BodyLimit: 500 * 1024 * 1024,
 	})
@@ -22,9 +29,13 @@ func main() {
 			return c.Status(400).JSON(fiber.Map{"error": "No file selected"})
 		}
 
-		os.MkdirAll("./uploads", os.ModePerm)
 		savePath := filepath.Join("./uploads", file.Filename)
-		defer os.Remove(savePath)
+		defer func() {
+			err := os.Remove(savePath)
+			if err != nil && !errors.Is(err, fs.ErrNotExist) {
+				log.Printf("Couldn't delete %s: %v", savePath, err)
+			}
+		}()
 
 		if err := c.SaveFile(file, savePath); err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": "Couldn't save demo locally"})
@@ -38,5 +49,5 @@ func main() {
 		return c.JSON(matchData)
 	})
 
-	app.Listen(":3000")
+	log.Fatal(app.Listen(":3000"))
 }
