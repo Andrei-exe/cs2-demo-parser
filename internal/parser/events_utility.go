@@ -10,6 +10,9 @@ func (m *MatchAnalyzer) SyncUtilityScore() {
 			continue
 		}
 
+		if sideName(p.Team) == "" {
+			continue
+		}
 		m.EnsurePlayerIsRegistered(p.SteamID64, p.Name)
 
 		m.MatchData.Players[p.SteamID64].UtilityDamage = p.UtilityDamage()

@@ -15,8 +15,14 @@ func (m *MatchAnalyzer) SyncScore() {
 			continue
 		}
 
+		playerSide := sideName(p.Team)
+		if playerSide == "" {
+			continue
+		}
+
 		m.EnsurePlayerIsRegistered(p.SteamID64, p.Name)
 
+		m.MatchData.Players[p.SteamID64].Team = playerSide
 		m.MatchData.Players[p.SteamID64].Kills = p.Kills()
 		m.MatchData.Players[p.SteamID64].Deaths = p.Deaths()
 		m.MatchData.Players[p.SteamID64].Assists = p.Assists()

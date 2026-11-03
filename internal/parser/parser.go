@@ -5,6 +5,7 @@ import (
 	"math"
 
 	dem "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs"
+	com "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/common"
 	msg "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/msg"
 )
 
@@ -12,6 +13,17 @@ type MatchAnalyzer struct {
 	MatchData *models.MatchStats
 	parser    dem.Parser
 	isLive    bool
+}
+
+func sideName(team com.Team) string {
+	switch team {
+	case com.TeamCounterTerrorists:
+		return "CT"
+	case com.TeamTerrorists:
+		return "T"
+	default:
+		return ""
+	}
 }
 
 func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
@@ -57,8 +69,15 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 		}
 	}
 
-	analyzer.MatchData.CTScore = analyzer.parser.GameState().TeamCounterTerrorists().Score()
-	analyzer.MatchData.TeroScore = analyzer.parser.GameState().TeamTerrorists().Score()
+	gameState := analyzer.parser.GameState()
+	analyzer.MatchData.CT = models.TeamStats{
+		Name:  gameState.TeamCounterTerrorists().ClanName(),
+		Score: gameState.TeamCounterTerrorists().Score(),
+	}
+	analyzer.MatchData.T = models.TeamStats{
+		Name:  gameState.TeamTerrorists().ClanName(),
+		Score: gameState.TeamTerrorists().Score(),
+	}
 
 	return analyzer.MatchData, nil
 }

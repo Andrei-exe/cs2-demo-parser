@@ -3,6 +3,7 @@ package models
 type PlayerStats struct {
 	SteamID uint64 `json:"steam_id"`
 	Name    string `json:"name"`
+	Team    string `json:"team"`
 
 	Kills              int `json:"kills"`
 	Deaths             int `json:"deaths"`
