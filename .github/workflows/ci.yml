@@ -33,6 +33,36 @@ jobs:
       - name: Test
         run: go test ./...
 
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+          # Builds golangci-lint with the Go version from go.mod,
+          # so it never complains that our Go version is too new
+          install-mode: goinstall
+
+  vulncheck:
+    name: Vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      # This action does its own checkout and Go setup
+      - name: govulncheck
+        uses: golang/govulncheck-action@v1
+        with:
+          go-version-file: go.mod
+
   frontend:
     name: Frontend (Vue)
     runs-on: ubuntu-latest

@@ -20,6 +20,6 @@ func main() {
 		log.Fatalf("Parsing error: %v", err)
 	}
 
-	jsonData, err := json.MarshalIndent(matchStats, "", "  ")
+	jsonData, _ := json.MarshalIndent(matchStats, "", "  ")
 	fmt.Println(string(jsonData))
 }
