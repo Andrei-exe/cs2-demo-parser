@@ -11,8 +11,13 @@ type PlayerStats struct {
 	TotalDamage        int `json:"total_damage"`
 	Headshots          int `json:"headshots"`
 	HeadshotPercentage int `json:"headshot_percentage"`
-	UtilityDamage      int `json:"utility_damage"`
-	EnemiesFlashed     int `json:"enemies_flashed"`
+
+	UtilityDamage  int `json:"utility_damage"`
+	EnemiesFlashed int `json:"enemies_flashed"`
+
+	OpeningKills   int `json:"opening_kills"`
+	OpeningDeaths  int `json:"opening_deaths"`
+	OpeningSuccess int `json:"opening_success"`
 
 	ChatMessages []string `json:"chat_messages"`
 }
