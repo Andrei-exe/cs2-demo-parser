@@ -26,6 +26,14 @@ func sideName(team com.Team) string {
 	}
 }
 
+func headshotPercentage(kills, headshots int) int {
+	if kills == 0 {
+		return 0
+	}
+	percentage := (float64(headshots) / float64(kills)) * 100
+	return int(math.Round(percentage))
+}
+
 func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 	analyzer := MatchAnalyzer{
 		MatchData: &models.MatchStats{
@@ -63,10 +71,7 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 	analyzer.SyncUtilityScore()
 
 	for _, p := range analyzer.MatchData.Players {
-		if p.Kills > 0 && p.Headshots > 0 {
-			percentage := (float64(p.Headshots) / float64(p.Kills)) * 100
-			p.HeadshotPercentage = int(math.Round(percentage))
-		}
+		p.HeadshotPercentage = headshotPercentage(p.Kills, p.Headshots)
 	}
 
 	gameState := analyzer.parser.GameState()
