@@ -1,6 +1,7 @@
 package parser
 
 import (
+	com "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/common"
 	events "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/events"
 )
 
@@ -23,9 +24,14 @@ func (m *MatchAnalyzer) OnRoundStart(_ events.RoundStart) {
 }
 
 // Fixes 1 tick delay and catches any last kills occuring in the round (not exit-frags)
-func (m *MatchAnalyzer) OnRoundEnd(_ events.RoundEnd) {
+func (m *MatchAnalyzer) OnRoundEnd(e events.RoundEnd) {
 	m.SyncScore()
 	m.SyncUtilityScore()
 
+	if m.isLive && !m.round.ended {
+		if e.Winner == com.TeamCounterTerrorists || e.Winner == com.TeamTerrorists {
+			m.commitRound()
+		}
+	}
 	m.round.ended = true
 }

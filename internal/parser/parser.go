@@ -17,12 +17,26 @@ type MatchAnalyzer struct {
 }
 
 type roundState struct {
-	openingDone bool
-	ended       bool
+	openingDone   bool
+	ended         bool
+	openingKiller uint64
+	openingVictim uint64
 }
 
 func (m *MatchAnalyzer) resetRound() {
-	m.round = roundState{}
+	m.round = roundState{
+		openingDone: false,
+		ended:       false,
+	}
+}
+
+func (m *MatchAnalyzer) commitRound() {
+	if p, ok := m.MatchData.Players[m.round.openingKiller]; ok {
+		p.OpeningKills++
+	}
+	if p, ok := m.MatchData.Players[m.round.openingVictim]; ok {
+		p.OpeningDeaths++
+	}
 }
 
 func sideName(team com.Team) string {
@@ -36,12 +50,12 @@ func sideName(team com.Team) string {
 	}
 }
 
-func headshotPercentage(kills, headshots int) int {
-	if kills == 0 {
+func percentage(total, part int) int {
+	if total == 0 {
 		return 0
 	}
-	percentage := (float64(headshots) / float64(kills)) * 100
-	return int(math.Round(percentage))
+	perc := (float64(part) / float64(total)) * 100
+	return int(math.Round(perc))
 }
 
 func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
@@ -64,9 +78,10 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 
 		// Combat-related handlers
 		p.RegisterEventHandler(analyzer.OnKill)
+		p.RegisterEventHandler(analyzer.TrackOpeningDuel)
 
-		// Round state handlers
-		p.RegisterEventHandler(analyzer.OnRoundEnd)
+		// RoundState-related handlers
+		p.RegisterEventHandler(analyzer.OnRoundStart)
 		p.RegisterEventHandler(analyzer.OnRoundEnd)
 
 		// Other-related handlers
@@ -84,7 +99,8 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 	analyzer.SyncUtilityScore()
 
 	for _, p := range analyzer.MatchData.Players {
-		p.HeadshotPercentage = headshotPercentage(p.Kills, p.Headshots)
+		p.HeadshotPercentage = percentage(p.Kills, p.Headshots)
+		p.OpeningSuccess = percentage(p.OpeningDeaths+p.OpeningKills, p.OpeningKills)
 	}
 
 	gameState := analyzer.parser.GameState()

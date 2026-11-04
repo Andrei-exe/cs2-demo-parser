@@ -32,16 +32,37 @@ func (m *MatchAnalyzer) SyncScore() {
 
 // Calls for scoreboard update and listens for exit-frags after RoundEnd is triggered
 func (m *MatchAnalyzer) OnKill(e events.Kill) {
-	m.SyncScore()
-	m.SyncUtilityScore()
-
 	if m.parser.GameState().IsWarmupPeriod() || !m.isLive {
 		return
 	}
+
+	m.SyncScore()
+	m.SyncUtilityScore()
+
 	if e.Killer != nil && e.Victim != nil && e.Killer.SteamID64 != 0 {
 		if e.Killer.Team != e.Victim.Team && e.IsHeadshot {
 			m.EnsurePlayerIsRegistered(e.Killer.SteamID64, e.Killer.Name)
 			m.MatchData.Players[e.Killer.SteamID64].Headshots++
+		}
+	}
+}
+
+func (m *MatchAnalyzer) TrackOpeningDuel(e events.Kill) {
+	if m.parser.GameState().IsWarmupPeriod() || !m.isLive || m.round.openingDone || m.round.ended {
+		return
+	}
+
+	if e.Killer != nil && e.Victim != nil {
+		if e.Killer.Team != e.Victim.Team {
+			m.round.openingDone = true
+			if e.Killer.SteamID64 != 0 {
+				m.EnsurePlayerIsRegistered(e.Killer.SteamID64, e.Killer.Name)
+				m.round.openingKiller = e.Killer.SteamID64
+			}
+			if e.Victim.SteamID64 != 0 {
+				m.EnsurePlayerIsRegistered(e.Victim.SteamID64, e.Victim.Name)
+				m.round.openingVictim = e.Victim.SteamID64
+			}
 		}
 	}
 }
