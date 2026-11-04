@@ -17,8 +17,15 @@ func (m *MatchAnalyzer) InitializePlayersOnMatchStart(e events.AnnouncementMatch
 	}
 }
 
+// Reset round state on start
+func (m *MatchAnalyzer) OnRoundStart(_ events.RoundStart) {
+	m.resetRound()
+}
+
 // Fixes 1 tick delay and catches any last kills occuring in the round (not exit-frags)
 func (m *MatchAnalyzer) OnRoundEnd(_ events.RoundEnd) {
 	m.SyncScore()
 	m.SyncUtilityScore()
+
+	m.round.ended = true
 }

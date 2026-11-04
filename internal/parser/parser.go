@@ -13,6 +13,16 @@ type MatchAnalyzer struct {
 	MatchData *models.MatchStats
 	parser    dem.Parser
 	isLive    bool
+	round     roundState
+}
+
+type roundState struct {
+	openingDone bool
+	ended       bool
+}
+
+func (m *MatchAnalyzer) resetRound() {
+	m.round = roundState{}
 }
 
 func sideName(team com.Team) string {
@@ -54,6 +64,9 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 
 		// Combat-related handlers
 		p.RegisterEventHandler(analyzer.OnKill)
+
+		// Round state handlers
+		p.RegisterEventHandler(analyzer.OnRoundEnd)
 		p.RegisterEventHandler(analyzer.OnRoundEnd)
 
 		// Other-related handlers
