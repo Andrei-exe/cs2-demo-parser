@@ -7,7 +7,9 @@ import (
 
 func (m *MatchAnalyzer) InitializePlayersOnMatchStart(e events.AnnouncementMatchStarted) {
 	m.isLive = true
-
+	for _, p := range m.MatchData.Players {
+		p.ResetEventsStats()
+	}
 	for _, p := range m.parser.GameState().Participants().Playing() {
 
 		if p.SteamID64 == 0 {
