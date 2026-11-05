@@ -52,8 +52,32 @@ const columns = [
   { key: 'headshot_percentage', label: 'HS%', color: 'text-amber-300', suffix: '%' },
   { key: 'total_damage', label: 'DMG', color: 'text-white font-semibold' },
   { key: 'utility_damage', label: 'Utility DMG', color: 'text-zinc-300' },
-  { key: 'enemies_flashed', label: 'Flashed', color: 'text-sky-300' }
+  { key: 'enemies_flashed', label: 'Flashed', color: 'text-sky-300' },
+  // Opening duels: first kill of each round. "duel" cells render kills–deaths, sorted by kills.
+  {
+    key: 'opening_kills',
+    label: 'Entry K–D',
+    title: 'Opening duels: first kills – first deaths of a round',
+    type: 'duel',
+    divider: true
+  },
+  {
+    key: 'opening_success',
+    label: 'Entry %',
+    title: 'Share of opening duels won',
+    type: 'entryRate'
+  }
 ]
+
+const openingDuels = (player) => (player.opening_kills ?? 0) + (player.opening_deaths ?? 0)
+
+// Green when the player wins most of his opening duels, red when he loses most of them
+const entryRateClass = (player) => {
+  const rate = player.opening_success ?? 0
+  if (rate > 50) return 'text-emerald-400'
+  if (rate < 50) return 'text-rose-400'
+  return 'text-zinc-300'
+}
 
 // Visual identity of each side; the backend only sends "CT" / "T"
 const sides = {
@@ -207,7 +231,7 @@ const winnerSide = computed(() => {
           </div>
 
           <div class="overflow-x-auto">
-            <table class="w-full min-w-[720px] table-fixed text-left text-sm">
+            <table class="w-full min-w-[880px] table-fixed text-left text-sm">
               <thead>
                 <tr class="bg-zinc-950/50 text-xs text-zinc-400">
                   <th class="w-52 px-6 py-3 font-medium">Player</th>
@@ -215,7 +239,11 @@ const winnerSide = computed(() => {
                     v-for="col in columns"
                     :key="col.key"
                     class="cursor-pointer px-4 py-3 text-center font-medium whitespace-nowrap select-none hover:text-zinc-100"
-                    :class="sortKey === col.key ? 'text-[#FF5533]' : ''"
+                    :class="[
+                      sortKey === col.key ? 'text-[#FF5533]' : '',
+                      col.divider ? 'border-l border-zinc-800' : ''
+                    ]"
+                    :title="col.title"
                     @click="sortKey = col.key"
                   >
                     {{ col.label }}<span v-if="sortKey === col.key"> ↓</span>
@@ -237,10 +265,20 @@ const winnerSide = computed(() => {
                   <td
                     v-for="col in columns"
                     :key="col.key"
-                    class="px-4 py-3 text-center tabular-nums"
-                    :class="col.color"
+                    class="px-4 py-3 text-center tabular-nums whitespace-nowrap"
+                    :class="[col.color, col.divider ? 'border-l border-zinc-800' : '']"
                   >
-                    {{ player[col.key] ?? 0 }}{{ col.suffix || '' }}
+                    <span v-if="col.type === 'duel' && openingDuels(player) === 0" class="text-zinc-600">0 – 0</span>
+                    <template v-else-if="col.type === 'duel'">
+                      <span class="text-emerald-400">{{ player.opening_kills ?? 0 }}</span>
+                      <span class="text-zinc-600"> – </span>
+                      <span class="text-rose-400">{{ player.opening_deaths ?? 0 }}</span>
+                    </template>
+                    <template v-else-if="col.type === 'entryRate'">
+                      <span v-if="openingDuels(player) === 0" class="text-zinc-600" title="No opening duels">—</span>
+                      <span v-else :class="entryRateClass(player)">{{ player.opening_success }}%</span>
+                    </template>
+                    <template v-else>{{ player[col.key] ?? 0 }}{{ col.suffix || '' }}</template>
                   </td>
                 </tr>
               </tbody>
