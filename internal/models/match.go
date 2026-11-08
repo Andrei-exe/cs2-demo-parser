@@ -5,6 +5,7 @@ type MatchStats struct {
 	CT      TeamStats               `json:"ct"`
 	T       TeamStats               `json:"t"`
 	Players map[uint64]*PlayerStats `json:"players"`
+	Rounds  []*Round                `json:"rounds"`
 }
 
 type TeamStats struct {

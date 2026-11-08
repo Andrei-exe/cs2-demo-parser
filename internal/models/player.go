@@ -21,9 +21,3 @@ type PlayerStats struct {
 
 	ChatMessages []string `json:"chat_messages"`
 }
-
-func (p *PlayerStats) ResetEventsStats() {
-	p.Headshots = 0
-	p.OpeningKills = 0
-	p.OpeningDeaths = 0
-}
