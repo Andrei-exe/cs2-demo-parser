@@ -6,38 +6,7 @@ import (
 
 	dem "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs"
 	com "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/common"
-	msg "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/msg"
 )
-
-type MatchAnalyzer struct {
-	MatchData *models.MatchStats
-	parser    dem.Parser
-	isLive    bool
-	round     roundState
-}
-
-type roundState struct {
-	openingDone   bool
-	ended         bool
-	openingKiller uint64
-	openingVictim uint64
-}
-
-func (m *MatchAnalyzer) resetRound() {
-	m.round = roundState{
-		openingDone: false,
-		ended:       false,
-	}
-}
-
-func (m *MatchAnalyzer) commitRound() {
-	if p, ok := m.MatchData.Players[m.round.openingKiller]; ok {
-		p.OpeningKills++
-	}
-	if p, ok := m.MatchData.Players[m.round.openingVictim]; ok {
-		p.OpeningDeaths++
-	}
-}
 
 func sideName(team com.Team) string {
 	switch team {
@@ -58,34 +27,31 @@ func percentage(total, part int) int {
 	return int(math.Round(perc))
 }
 
+// Parses a demo file and returns the stats computed by all analyzers
 func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
-	analyzer := MatchAnalyzer{
-		MatchData: &models.MatchStats{
-			Players: make(map[uint64]*models.PlayerStats),
-		},
-		isLive: false,
+	m := newMatch()
+
+	m.analyzers = []Analyzer{
+		// Combat-related analyzers
+		newScoreAnalyzer(m),
+		newOpeningAnalyzer(m),
+
+		// Utility-related analyzers
+		newUtilityAnalyzer(m),
+
+		// Other-related analyzers
+		newChatAnalyzer(m),
 	}
 
 	err := dem.ParseFile(demoFilePath, func(p dem.Parser) error {
-		analyzer.parser = p
+		m.parser = p
 
-		p.RegisterNetMessageHandler(func(m *msg.CSVCMsg_ServerInfo) {
-			analyzer.MatchData.MapName = m.GetMapName()
-		})
+		// Core must be registered first so it decides round validity before analyzers react
+		m.register(p)
 
-		// PlayerData-related handlers
-		p.RegisterEventHandler(analyzer.InitializePlayersOnMatchStart)
-
-		// Combat-related handlers
-		p.RegisterEventHandler(analyzer.OnKill)
-		p.RegisterEventHandler(analyzer.TrackOpeningDuel)
-
-		// RoundState-related handlers
-		p.RegisterEventHandler(analyzer.OnRoundStart)
-		p.RegisterEventHandler(analyzer.OnRoundEnd)
-
-		// Other-related handlers
-		p.RegisterEventHandler(analyzer.RegisterChatMessages)
+		for _, a := range m.analyzers {
+			a.Register(p)
+		}
 
 		return nil
 	})
@@ -94,37 +60,21 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 		return nil, err
 	}
 
-	// In case demo end abruptly after last round
-	analyzer.SyncScore()
-	analyzer.SyncUtilityScore()
-
-	for _, p := range analyzer.MatchData.Players {
-		p.HeadshotPercentage = percentage(p.Kills, p.Headshots)
-		p.OpeningSuccess = percentage(p.OpeningDeaths+p.OpeningKills, p.OpeningKills)
+	// Final syncs and percentages
+	for _, a := range m.analyzers {
+		a.Finalize(m.data)
 	}
 
-	gameState := analyzer.parser.GameState()
-	analyzer.MatchData.CT = models.TeamStats{
+	// Set team names and score
+	gameState := m.parser.GameState()
+	m.data.CT = models.TeamStats{
 		Name:  gameState.TeamCounterTerrorists().ClanName(),
 		Score: gameState.TeamCounterTerrorists().Score(),
 	}
-	analyzer.MatchData.T = models.TeamStats{
+	m.data.T = models.TeamStats{
 		Name:  gameState.TeamTerrorists().ClanName(),
 		Score: gameState.TeamTerrorists().Score(),
 	}
 
-	return analyzer.MatchData, nil
-}
-
-func (m *MatchAnalyzer) EnsurePlayerIsRegistered(steamID uint64, name string) {
-	if steamID == 0 {
-		return
-	}
-
-	if m.MatchData.Players[steamID] == nil {
-		m.MatchData.Players[steamID] = &models.PlayerStats{
-			SteamID: steamID,
-			Name:    name,
-		}
-	}
+	return m.data, nil
 }

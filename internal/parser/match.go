@@ -23,6 +23,7 @@ func newMatch() *match {
 	return &match{
 		data: &models.MatchStats{
 			Players: make(map[uint64]*models.PlayerStats),
+			Rounds:  []*models.Round{},
 		},
 	}
 }
@@ -49,7 +50,7 @@ func (m *match) isActive() bool {
 	return m.isLive && !m.parser.GameState().IsWarmupPeriod()
 }
 
-// Check event occured during a live round
+// Check event occurred during a live round
 func (m *match) isInRound() bool {
 	return m.isActive() && m.currentRound != nil && !m.roundEnded
 }
@@ -71,7 +72,7 @@ func (m *match) onMatchStart(_ events.AnnouncementMatchStarted) {
 	m.isLive = true
 
 	// Clear unnecessary stats from knife rounds / warmup / pre-restart events
-	m.data.Rounds = nil
+	m.data.Rounds = []*models.Round{}
 
 	for _, p := range m.parser.GameState().Participants().Playing() {
 		m.player(p.SteamID64, p.Name)
