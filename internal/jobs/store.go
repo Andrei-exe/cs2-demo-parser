@@ -63,22 +63,22 @@ func (s *Store) Update(id string, fn func(j *Job)) bool {
 
 func (s *Store) SetRunning(id string) bool {
 	return s.Update(id, func(j *Job) {
-		s.jobs[id].Status = StatusRunning
+		j.Status = StatusRunning
 	})
 }
 
 func (s *Store) SetProgress(id string, p float64) bool {
 	return s.Update(id, func(j *Job) {
-		s.jobs[id].Progress = p
+		j.Progress = p
 	})
 }
 
 func (s *Store) SetDone(id string, res *models.MatchStats) bool {
 	return s.Update(id, func(j *Job) {
-		s.jobs[id].Status = StatusDone
-		s.jobs[id].Result = res
-		s.jobs[id].Progress = 1
-		s.jobs[id].FinishedAt = time.Now()
+		j.Status = StatusDone
+		j.Result = res
+		j.Progress = 1
+		j.FinishedAt = time.Now()
 	})
 }
 
@@ -86,8 +86,8 @@ func (s *Store) SetFailed(id string, err error) bool {
 	return s.Update(id, func(j *Job) {
 		s.jobs[id].Status = StatusFailed
 		if err != nil {
-			s.jobs[id].Error = err.Error()
+			j.Error = err.Error()
 		}
-		s.jobs[id].FinishedAt = time.Now()
+		j.FinishedAt = time.Now()
 	})
 }
