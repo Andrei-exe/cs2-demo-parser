@@ -38,6 +38,14 @@ func tempDemo(t *testing.T) string {
 	return path
 }
 
+// Submits a job and fails the test right away if the queue rejects it
+func mustSubmit(t *testing.T, p *Pool, id string) {
+	t.Helper()
+	if err := p.Submit(id); err != nil {
+		t.Fatalf("Submit(%s): %v", id, err)
+	}
+}
+
 // Polls the store until the job reaches done/failed or the deadline passes
 func waitFinished(t *testing.T, s *Store, id string) Job {
 	t.Helper()
@@ -105,8 +113,8 @@ func TestPoolRecoversFromPanic(t *testing.T) {
 	// the second job would never finish
 	first := s.Create(tempDemo(t))
 	second := s.Create(tempDemo(t))
-	p.Submit(first.ID)
-	p.Submit(second.ID)
+	mustSubmit(t, p, first.ID)
+	mustSubmit(t, p, second.ID)
 
 	for _, id := range []string{first.ID, second.ID} {
 		j := waitFinished(t, s, id)
@@ -131,7 +139,7 @@ func TestPoolTimeout(t *testing.T) {
 	p.Start(ctx)
 
 	job := s.Create(tempDemo(t))
-	p.Submit(job.ID)
+	mustSubmit(t, p, job.ID)
 
 	j := waitFinished(t, s, job.ID)
 	if j.Status != StatusFailed {
