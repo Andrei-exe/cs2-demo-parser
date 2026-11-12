@@ -63,7 +63,7 @@ func ParseDemo(ctx context.Context, demoFilePath string, onProgress func(float64
 		r: f,
 	}
 
-	errP := dem.Parse(cr, func(p dem.Parser) error {
+	err = dem.Parse(cr, func(p dem.Parser) error {
 		m.parser = p
 		registerControl(ctx, cr, info.Size(), p, onProgress)
 
@@ -77,7 +77,7 @@ func ParseDemo(ctx context.Context, demoFilePath string, onProgress func(float64
 		return nil
 	})
 
-	if errP != nil {
+	if err != nil {
 		if errors.Is(err, dem.ErrCancelled) && ctx.Err() != nil {
 			return nil, fmt.Errorf("parsing aborted: %w", ctx.Err())
 		}
