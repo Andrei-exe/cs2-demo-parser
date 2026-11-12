@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 
 	dem "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs"
 	com "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/common"
@@ -51,9 +52,20 @@ func ParseDemo(ctx context.Context, demoFilePath string, onProgress func(float64
 		newChatAnalyzer(m),
 	}
 
-	err := dem.ParseFile(demoFilePath, func(p dem.Parser) error {
+	f, err := os.Open(demoFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("open demo: %w", err)
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	cr := &countingReader{
+		r: f,
+	}
+
+	errP := dem.Parse(cr, func(p dem.Parser) error {
 		m.parser = p
-		registerControl(ctx, p, onProgress)
+		registerControl(ctx, cr, info.Size(), p, onProgress)
 
 		// Core must be registered first so it decides round validity before analyzers react
 		m.register(p)
@@ -65,11 +77,15 @@ func ParseDemo(ctx context.Context, demoFilePath string, onProgress func(float64
 		return nil
 	})
 
-	if err != nil {
+	if errP != nil {
 		if errors.Is(err, dem.ErrCancelled) && ctx.Err() != nil {
 			return nil, fmt.Errorf("parsing aborted: %w", ctx.Err())
 		}
 		return nil, err
+	}
+
+	if onProgress != nil {
+		onProgress(1)
 	}
 
 	// Final syncs and percentages
@@ -91,8 +107,9 @@ func ParseDemo(ctx context.Context, demoFilePath string, onProgress func(float64
 	return m.data, nil
 }
 
-func registerControl(ctx context.Context, p dem.Parser, onProgress func(float64)) {
-	var last float32
+// Progress of parsing process
+func registerControl(ctx context.Context, cr *countingReader, total int64, p dem.Parser, onProgress func(float64)) {
+	var last float64
 
 	p.RegisterEventHandler(func(events.FrameDone) {
 		if ctx.Err() != nil {
@@ -104,7 +121,7 @@ func registerControl(ctx context.Context, p dem.Parser, onProgress func(float64)
 			return
 		}
 
-		current := p.Progress()
+		current := float64(cr.n.Load()) / float64(total)
 		if current-last >= 0.01 {
 			last = current
 			onProgress(float64(current))

@@ -83,6 +83,13 @@ func (p *Pool) process(ctx context.Context, id string) {
 	}()
 
 	p.store.SetRunning(id)
+
+	start := time.Now()
+	defer func() {
+		j, _ := p.store.Get(id)
+		log.Printf("job %s %s in %s", id, j.Status, time.Since(start).Round(time.Millisecond))
+	}()
+
 	jobCtx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
 

@@ -91,3 +91,10 @@ func (s *Store) SetFailed(id string, err error) bool {
 		j.FinishedAt = time.Now()
 	})
 }
+
+func (s *Store) Delete(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.jobs, id)
+}
