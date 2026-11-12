@@ -107,6 +107,7 @@ func registerControl(ctx context.Context, p dem.Parser, onProgress func(float64)
 		current := p.Progress()
 		if current-last >= 0.01 {
 			last = current
+			onProgress(float64(current))
 		}
 	})
 }
