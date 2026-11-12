@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -15,7 +16,11 @@ func main() {
 	}
 	demoPath := os.Args[1]
 
-	matchStats, err := parser.ParseDemo(demoPath)
+	matchStats, err := parser.ParseDemo(context.Background(), demoPath, func(f float64) {
+		fmt.Fprintf(os.Stderr, "\rParsing... %3.0f%%", f*100)
+	})
+	fmt.Fprintln(os.Stderr)
+
 	if err != nil {
 		log.Fatalf("Parsing error: %v", err)
 	}

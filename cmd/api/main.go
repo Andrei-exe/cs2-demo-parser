@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"log"
@@ -41,7 +42,7 @@ func main() {
 			return c.Status(500).JSON(fiber.Map{"error": "Couldn't save demo locally"})
 		}
 
-		matchData, err := parser.ParseDemo(savePath)
+		matchData, err := parser.ParseDemo(context.Background(), savePath, nil)
 		if err != nil {
 			return c.Status(500).JSON(fiber.Map{"error": "Parsing error: " + err.Error()})
 		}

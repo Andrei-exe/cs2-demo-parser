@@ -1,11 +1,15 @@
 package parser
 
 import (
+	"context"
 	"cs2-parser/internal/models"
+	"errors"
+	"fmt"
 	"math"
 
 	dem "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs"
 	com "github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/common"
+	"github.com/markus-wa/demoinfocs-golang/v5/pkg/demoinfocs/events"
 )
 
 func sideName(team com.Team) string {
@@ -28,7 +32,11 @@ func percentage(total, part int) int {
 }
 
 // Parses a demo file and returns the stats computed by all analyzers
-func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
+func ParseDemo(ctx context.Context, demoFilePath string, onProgress func(float64)) (*models.MatchStats, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	m := newMatch()
 
 	m.analyzers = []Analyzer{
@@ -45,6 +53,7 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 
 	err := dem.ParseFile(demoFilePath, func(p dem.Parser) error {
 		m.parser = p
+		registerControl(ctx, p, onProgress)
 
 		// Core must be registered first so it decides round validity before analyzers react
 		m.register(p)
@@ -57,6 +66,9 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 	})
 
 	if err != nil {
+		if errors.Is(err, dem.ErrCancelled) && ctx.Err() != nil {
+			return nil, fmt.Errorf("parsing aborted: %w", ctx.Err())
+		}
 		return nil, err
 	}
 
@@ -77,4 +89,24 @@ func ParseDemo(demoFilePath string) (*models.MatchStats, error) {
 	}
 
 	return m.data, nil
+}
+
+func registerControl(ctx context.Context, p dem.Parser, onProgress func(float64)) {
+	var last float32
+
+	p.RegisterEventHandler(func(events.FrameDone) {
+		if ctx.Err() != nil {
+			p.Cancel()
+			return
+		}
+
+		if onProgress == nil {
+			return
+		}
+
+		current := p.Progress()
+		if current-last >= 0.01 {
+			last = current
+		}
+	})
 }
