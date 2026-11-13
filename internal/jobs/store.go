@@ -138,3 +138,20 @@ func (s *Store) notify(id string) {
 		}
 	}
 }
+
+func (s *Store) DeleteExpired(ttl time.Duration) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	var n int
+	for id, j := range s.jobs {
+		if j.Status.IsFinal() && now.Sub(j.FinishedAt) > ttl {
+			delete(s.jobs, id)
+			delete(s.subs, id)
+			n++
+		}
+	}
+
+	return n
+}

@@ -26,6 +26,7 @@ func main() {
 	queueSize := flag.Int("queue", 10, "max jobs waiting in queue")
 	timeout := flag.Duration("timeout", 2*time.Minute, "max time per parse")
 	shutdownTimeout := flag.Duration("shutdown-timeout", 30*time.Second, "max time to wait for running jobs on shutdown")
+	jobTTL := flag.Duration("job-ttl", 30*time.Minute, "how long finished jobs are kept in memory")
 	flag.Parse()
 
 	if err := os.RemoveAll("./uploads"); err != nil {
@@ -40,6 +41,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	store.StartJanitor(ctx, *jobTTL, min(*jobTTL, time.Minute))
 	context.AfterFunc(ctx, stop)
 
 	workCtx, abortWork := context.WithCancel(context.Background())

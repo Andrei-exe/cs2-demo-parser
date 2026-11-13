@@ -46,6 +46,19 @@ func mustSubmit(t *testing.T, p *Pool, id string) {
 	}
 }
 
+// Polls until the file is gone. The worker deletes it in a defer that runs
+// right after the job is marked done, so it can lag behind the status a bit
+func waitDeleted(path string) bool {
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			return true
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return false
+}
+
 // Polls the store until the job reaches done/failed or the deadline passes
 func waitFinished(t *testing.T, s *Store, id string) Job {
 	t.Helper()
@@ -92,7 +105,7 @@ func TestPoolProcessesJobs(t *testing.T) {
 		if j.Result == nil {
 			t.Errorf("job %d: result is nil", i)
 		}
-		if _, err := os.Stat(paths[i]); !errors.Is(err, os.ErrNotExist) {
+		if !waitDeleted(paths[i]) {
 			t.Errorf("job %d: demo file was not deleted", i)
 		}
 	}
