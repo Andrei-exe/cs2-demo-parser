@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"cs2-parser/internal/jobs"
@@ -22,15 +25,28 @@ func main() {
 	workers := flag.Int("workers", 2, "number of parallel parse workers")
 	queueSize := flag.Int("queue", 10, "max jobs waiting in queue")
 	timeout := flag.Duration("timeout", 2*time.Minute, "max time per parse")
+	shutdownTimeout := flag.Duration("shutdown-timeout", 30*time.Second, "max time to wait for running jobs on shutdown")
 	flag.Parse()
+
+	if err := os.RemoveAll("./uploads"); err != nil {
+		log.Fatalf("Couldn't clear uploads folder: %v", err)
+	}
 
 	if err := os.MkdirAll("./uploads", os.ModePerm); err != nil {
 		log.Fatalf("Couldn't create uploads folder: %v", err)
 	}
 
 	store := jobs.NewStore()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	context.AfterFunc(ctx, stop)
+
+	workCtx, abortWork := context.WithCancel(context.Background())
+	defer abortWork()
+
 	pool := jobs.NewPool(store, parser.ParseDemo, *workers, *queueSize, *timeout)
-	pool.Start(context.Background())
+	pool.Start(workCtx)
 
 	app := fiber.New(fiber.Config{
 		BodyLimit: 500 * 1024 * 1024,
@@ -58,6 +74,10 @@ func main() {
 		if err := pool.Submit(job.ID); err != nil {
 			store.Delete(job.ID)
 			_ = os.Remove(savePath)
+
+			if errors.Is(err, jobs.ErrShuttingDown) {
+				return c.Status(503).JSON(fiber.Map{"error": "Server is shutting down"})
+			}
 
 			c.Set("Retry-After", "10")
 			return c.Status(503).JSON(fiber.Map{"error": "Server is busy, try again in a few seconds"})
@@ -118,10 +138,28 @@ func main() {
 					}
 				case <-stream.Done():
 					return stream.Err()
+				case <-ctx.Done():
+					return nil
 				}
 			}
 		},
 	}))
 
-	log.Fatal(app.Listen(":3000"))
+	if err := app.Listen(":3000", fiber.ListenConfig{
+		GracefulContext: ctx,
+		ShutdownTimeout: 10 * time.Second,
+	}); err != nil {
+		log.Printf("server error: %v", err)
+	}
+
+	log.Println("HTTP stopped, waiting for running jobs...")
+	shCtx, cancel := context.WithTimeout(context.Background(), *shutdownTimeout)
+	defer cancel()
+
+	if err := pool.Shutdown(shCtx); err != nil {
+		log.Println("jobs didn't finish in time, aborting them")
+		abortWork()
+		pool.Wait()
+	}
+	log.Println("bye")
 }
