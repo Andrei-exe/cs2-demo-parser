@@ -1,15 +1,101 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
+
+const API_URL = 'http://localhost:3000'
 
 const selectedFile = ref(null)
-const isLoading = ref(false)
 const matchData = ref(null)
 const errorMsg = ref('')
 const sortKey = ref('total_damage')
 
+// Where the current analysis is: idle -> uploading -> queued -> running -> idle
+const phase = ref('idle')
+const progress = ref(0) // 0..1, meaning depends on the phase
+const isLoading = computed(() => phase.value !== 'idle')
+
+let eventSource = null
+let finished = false
+
+const phaseLabels = {
+  uploading: 'Uploading demo',
+  queued: 'Waiting in queue',
+  running: 'Parsing demo'
+}
+const progressPercent = computed(() => Math.round(progress.value * 100))
+
 const onFileChange = (event) => {
   selectedFile.value = event.target.files[0]
   errorMsg.value = ''
+}
+
+const closeStream = () => {
+  if (eventSource) {
+    eventSource.close()
+    eventSource = null
+  }
+}
+
+const fail = (message) => {
+  closeStream()
+  errorMsg.value = message
+  phase.value = 'idle'
+}
+
+// fetch() can't report upload progress, XMLHttpRequest can
+const uploadFile = (file) =>
+  new Promise((resolve, reject) => {
+    const formData = new FormData()
+    formData.append('demo', file)
+
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `${API_URL}/api/upload`)
+    xhr.responseType = 'json'
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) progress.value = e.loaded / e.total
+    }
+    xhr.onload = () => {
+      const data = xhr.response || {}
+      if (xhr.status === 202 && data.job_id) {
+        resolve(data.job_id)
+        return
+      }
+      let message = data.error || `Upload failed (HTTP ${xhr.status})`
+      const retryAfter = xhr.getResponseHeader('Retry-After')
+      if (xhr.status === 503 && retryAfter) message += ` (retry in ${retryAfter}s)`
+      reject(new Error(message))
+    }
+    xhr.onerror = () => reject(new Error('Could not reach the server. Is the API running?'))
+    xhr.send(formData)
+  })
+
+// Follows the job live through Server-Sent Events until it is done or failed
+const followJob = (jobId) => {
+  finished = false
+  eventSource = new EventSource(`${API_URL}/api/jobs/${jobId}/events`)
+
+  eventSource.addEventListener('progress', (e) => {
+    const data = JSON.parse(e.data)
+    phase.value = data.status === 'queued' ? 'queued' : 'running'
+    progress.value = data.progress
+  })
+
+  eventSource.addEventListener('done', (e) => {
+    finished = true
+    // Close first: EventSource would otherwise reconnect when the server ends the stream
+    closeStream()
+    matchData.value = JSON.parse(e.data).result
+    phase.value = 'idle'
+  })
+
+  eventSource.addEventListener('failed', (e) => {
+    finished = true
+    fail(JSON.parse(e.data).error || 'Parsing failed')
+  })
+
+  eventSource.onerror = () => {
+    if (!finished) fail('Lost connection to the server while parsing')
+  }
 }
 
 const uploadDemo = async () => {
@@ -18,32 +104,23 @@ const uploadDemo = async () => {
     return
   }
 
-  isLoading.value = true
+  closeStream()
   errorMsg.value = ''
   matchData.value = null
-
-  const formData = new FormData()
-  formData.append('demo', selectedFile.value)
+  progress.value = 0
+  phase.value = 'uploading'
 
   try {
-    const response = await fetch('http://localhost:3000/api/upload', {
-      method: 'POST',
-      body: formData
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Error processing the demo')
-    }
-
-    matchData.value = data
+    const jobId = await uploadFile(selectedFile.value)
+    phase.value = 'queued'
+    progress.value = 0
+    followJob(jobId)
   } catch (err) {
-    errorMsg.value = err.message
-  } finally {
-    isLoading.value = false
+    fail(err.message)
   }
 }
+
+onBeforeUnmount(closeStream)
 
 const columns = [
   { key: 'kills', label: 'K', color: 'text-emerald-400' },
@@ -165,12 +242,33 @@ const winnerSide = computed(() => {
         {{ errorMsg }}
       </div>
 
-      <!-- Loading -->
-      <div v-if="isLoading" class="flex items-center gap-3 py-10 text-zinc-400">
-        <div
-          class="h-6 w-6 animate-spin rounded-full border-2 border-[#FF5533] border-t-transparent"
-        ></div>
-        <span>Analyzing match, this can take a while...</span>
+      <!-- Progress -->
+      <div v-if="isLoading" class="mb-6 rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+        <div class="mb-3 flex items-center justify-between gap-3 text-sm">
+          <div class="flex items-center gap-2 text-zinc-200">
+            <div
+              class="h-4 w-4 animate-spin rounded-full border-2 border-[#FF5533] border-t-transparent"
+            ></div>
+            <span class="font-medium">{{ phaseLabels[phase] }}</span>
+          </div>
+          <span v-if="phase !== 'queued'" class="tabular-nums text-zinc-400">{{ progressPercent }}%</span>
+        </div>
+        <div class="h-2 overflow-hidden rounded-full bg-zinc-800">
+          <div
+            v-if="phase === 'queued'"
+            class="h-full w-1/3 animate-pulse rounded-full bg-zinc-600"
+          ></div>
+          <div
+            v-else
+            class="h-full rounded-full bg-[#FF5533] transition-[width] duration-200 ease-out"
+            :style="{ width: progressPercent + '%' }"
+          ></div>
+        </div>
+        <p class="mt-3 text-xs text-zinc-500">
+          <template v-if="phase === 'uploading'">Sending the file to the server</template>
+          <template v-else-if="phase === 'queued'">Other demos are being parsed, please wait</template>
+          <template v-else>Parsing your demo</template>
+        </p>
       </div>
 
       <!-- Results -->
