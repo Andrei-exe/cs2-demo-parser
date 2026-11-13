@@ -24,3 +24,10 @@ type Job struct {
 	FinishedAt time.Time          `json:"finishedAt,omitzero"`
 	FilePath   string             `json:"-"`
 }
+
+func (s Status) IsFinal() bool {
+	if s == StatusDone || s == StatusFailed {
+		return true
+	}
+	return false
+}

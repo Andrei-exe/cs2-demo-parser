@@ -14,6 +14,7 @@ import (
 
 	fiber "github.com/gofiber/fiber/v3"
 	cors "github.com/gofiber/fiber/v3/middleware/cors"
+	"github.com/gofiber/fiber/v3/middleware/sse"
 	"github.com/google/uuid"
 )
 
@@ -74,6 +75,53 @@ func main() {
 
 		return c.JSON(job)
 	})
+
+	app.Get("/api/jobs/:id/events", func(c fiber.Ctx) error {
+		if _, ok := store.Get(c.Params("id")); !ok {
+			return c.Status(404).JSON(fiber.Map{"error": "Job not found"})
+		}
+		return c.Next()
+	}, sse.New(sse.Config{
+		Handler: func(c fiber.Ctx, stream *sse.Stream) error {
+			id := strings.Clone(c.Params("id"))
+			updates, unsubscribe, ok := store.Subscribe(id)
+			if !ok {
+				return nil
+			}
+			defer unsubscribe()
+
+			send := func() (bool, error) {
+				job, _ := store.Get(id)
+
+				var err error
+				switch job.Status {
+				case jobs.StatusDone:
+					err = stream.Event(sse.Event{Name: "done", Data: job})
+				case jobs.StatusFailed:
+					err = stream.Event(sse.Event{Name: "failed", Data: fiber.Map{"error": job.Error}})
+				default:
+					err = stream.Event(sse.Event{Name: "progress", Data: fiber.Map{"status": job.Status, "progress": job.Progress}})
+				}
+
+				return job.Status.IsFinal(), err
+			}
+
+			if done, err := send(); done || err != nil {
+				return err
+			}
+
+			for {
+				select {
+				case <-updates:
+					if done, err := send(); done || err != nil {
+						return err
+					}
+				case <-stream.Done():
+					return stream.Err()
+				}
+			}
+		},
+	}))
 
 	log.Fatal(app.Listen(":3000"))
 }

@@ -11,11 +11,13 @@ import (
 type Store struct {
 	mu   sync.RWMutex
 	jobs map[string]*Job
+	subs map[string]map[chan struct{}]struct{}
 }
 
 func NewStore() *Store {
 	return &Store{
 		jobs: make(map[string]*Job),
+		subs: make(map[string]map[chan struct{}]struct{}),
 	}
 }
 
@@ -53,11 +55,13 @@ func (s *Store) Update(id string, fn func(j *Job)) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.jobs[id] == nil {
+	job := s.jobs[id]
+	if job == nil {
 		return false
 	}
 
-	fn(s.jobs[id])
+	fn(job)
+	s.notify(id)
 	return true
 }
 
@@ -97,4 +101,40 @@ func (s *Store) Delete(id string) {
 	defer s.mu.Unlock()
 
 	delete(s.jobs, id)
+	delete(s.subs, id)
+}
+
+func (s *Store) Subscribe(id string) (<-chan struct{}, func(), bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.jobs[id] == nil {
+		return nil, nil, false
+	}
+
+	ch := make(chan struct{}, 1)
+	if s.subs[id] == nil {
+		s.subs[id] = make(map[chan struct{}]struct{})
+	}
+	s.subs[id][ch] = struct{}{}
+
+	unsubscribe := func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		delete(s.subs[id], ch)
+		if len(s.subs[id]) == 0 {
+			delete(s.subs, id)
+		}
+	}
+
+	return ch, unsubscribe, true
+}
+
+func (s *Store) notify(id string) {
+	for ch := range s.subs[id] {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
 }

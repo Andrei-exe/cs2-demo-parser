@@ -56,7 +56,7 @@ func ParseDemo(ctx context.Context, demoFilePath string, onProgress func(float64
 	if err != nil {
 		return nil, fmt.Errorf("open demo: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	info, err := f.Stat()
 	if err != nil {
