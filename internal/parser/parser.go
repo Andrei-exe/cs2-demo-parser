@@ -59,6 +59,9 @@ func ParseDemo(ctx context.Context, demoFilePath string, onProgress func(float64
 	defer f.Close()
 
 	info, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat demo: %w", err)
+	}
 	cr := &countingReader{
 		r: f,
 	}
@@ -124,7 +127,7 @@ func registerControl(ctx context.Context, cr *countingReader, total int64, p dem
 		current := float64(cr.n.Load()) / float64(total)
 		if current-last >= 0.01 {
 			last = current
-			onProgress(float64(current))
+			onProgress(current)
 		}
 	})
 }
