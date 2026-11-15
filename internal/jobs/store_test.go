@@ -1,10 +1,109 @@
 package jobs
 
 import (
+	"cs2-parser/internal/models"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 )
+
+var testHash = strings.Repeat("a", 64)
+
+func TestCreateOrGetReusesInflightJob(t *testing.T) {
+	s := NewStore()
+
+	first, created := s.CreateOrGet(testHash, "demo.dem")
+	if !created {
+		t.Fatal("first CreateOrGet: created = false, want true")
+	}
+
+	second, created := s.CreateOrGet(testHash, "demo.dem")
+	if created {
+		t.Error("second CreateOrGet: created = true, want false")
+	}
+	if second.ID != first.ID {
+		t.Errorf("second job ID = %s, want the in-flight %s", second.ID, first.ID)
+	}
+
+	other, created := s.CreateOrGet(strings.Repeat("b", 64), "other.dem")
+	if !created || other.ID == first.ID {
+		t.Error("a different hash must get its own job")
+	}
+}
+
+// Once a job is finished (or deleted) its hash is free again
+func TestCreateOrGetAfterFinish(t *testing.T) {
+	tests := []struct {
+		name   string
+		finish func(s *Store, id string)
+	}{
+		{"done", func(s *Store, id string) { s.SetDone(id, &models.MatchStats{}) }},
+		{"failed", func(s *Store, id string) { s.SetFailed(id, errors.New("boom")) }},
+		{"deleted", func(s *Store, id string) { s.Delete(id) }},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewStore()
+			first, _ := s.CreateOrGet(testHash, "demo.dem")
+			tc.finish(s, first.ID)
+
+			second, created := s.CreateOrGet(testHash, "demo.dem")
+			if !created || second.ID == first.ID {
+				t.Errorf("got old job %s back after it finished", first.ID)
+			}
+		})
+	}
+}
+
+// Many uploads of the same demo at once must all land on a single job
+func TestCreateOrGetConcurrent(t *testing.T) {
+	s := NewStore()
+
+	const uploads = 50
+	ids := make(chan string, uploads)
+	var wg sync.WaitGroup
+	for range uploads {
+		wg.Go(func() {
+			j, _ := s.CreateOrGet(testHash, "demo.dem")
+			ids <- j.ID
+		})
+	}
+	wg.Wait()
+	close(ids)
+
+	unique := make(map[string]struct{})
+	for id := range ids {
+		unique[id] = struct{}{}
+	}
+	if len(unique) != 1 {
+		t.Errorf("%d jobs created for the same demo, want 1", len(unique))
+	}
+}
+
+func TestSetCached(t *testing.T) {
+	s := NewStore()
+	res := &models.MatchStats{MapName: "de_inferno"}
+
+	job, _ := s.CreateOrGet(testHash, "demo.dem")
+	s.SetCached(job.ID, res)
+	got, ok := s.Get(job.ID)
+	if !ok {
+		t.Fatal("cached job not found")
+	}
+	if got.Status != StatusDone || !got.Cached || got.Progress != 1 || got.Result != res {
+		t.Errorf("cached job = %+v, want done, cached, progress 1 and the given result", got)
+	}
+	if got.FinishedAt.IsZero() {
+		t.Error("FinishedAt not set, the janitor would never remove this job")
+	}
+
+	// A cached job is final, so the hash is free again
+	if _, created := s.CreateOrGet(testHash, "demo.dem"); !created {
+		t.Error("SetCached did not release the hash")
+	}
+}
 
 // Hammers the store from many goroutines at once
 // Run with: go test -race ./internal/jobs/...

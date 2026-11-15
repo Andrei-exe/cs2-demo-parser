@@ -5,9 +5,7 @@ import (
 	"cs2-parser/internal/models"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log"
-	"os"
 	"sync"
 	"time"
 )
@@ -26,6 +24,11 @@ type Pool struct {
 	wg       sync.WaitGroup
 	stop     chan struct{}
 	stopOnce sync.Once
+
+	// OnSuccess, if set, runs after a successful parse and before the job is
+	// marked done, so whatever it stores is visible by the time clients see
+	// "done". Set it before Start.
+	OnSuccess func(job Job, res *models.MatchStats)
 }
 
 func NewPool(store *Store, parse ParseFunc, workers, queueSize int, timeout time.Duration) *Pool {
@@ -87,13 +90,6 @@ func (p *Pool) process(ctx context.Context, id string) {
 		return
 	}
 
-	defer func() {
-		err := os.Remove(job.FilePath)
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
-			log.Printf("Couldn't delete %s: %v", job.FilePath, err)
-		}
-	}()
-
 	start := time.Now()
 	defer func() {
 		j, _ := p.store.Get(id)
@@ -117,9 +113,13 @@ func (p *Pool) process(ctx context.Context, id string) {
 
 	if err != nil {
 		p.store.SetFailed(id, err)
-	} else {
-		p.store.SetDone(id, res)
+		return
 	}
+
+	if p.OnSuccess != nil {
+		p.OnSuccess(job, res)
+	}
+	p.store.SetDone(id, res)
 }
 
 func (p *Pool) Wait() {

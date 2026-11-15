@@ -13,12 +13,13 @@ import (
 	"time"
 
 	"cs2-parser/internal/jobs"
+	"cs2-parser/internal/models"
 	parser "cs2-parser/internal/parser"
+	"cs2-parser/internal/storage"
 
 	fiber "github.com/gofiber/fiber/v3"
 	cors "github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/gofiber/fiber/v3/middleware/sse"
-	"github.com/google/uuid"
 )
 
 func main() {
@@ -27,14 +28,15 @@ func main() {
 	timeout := flag.Duration("timeout", 2*time.Minute, "max time per parse")
 	shutdownTimeout := flag.Duration("shutdown-timeout", 30*time.Second, "max time to wait for running jobs on shutdown")
 	jobTTL := flag.Duration("job-ttl", 30*time.Minute, "how long finished jobs are kept in memory")
+	storageDir := flag.String("storage", "./storage", "where demos and cached results are kept")
 	flag.Parse()
 
-	if err := os.RemoveAll("./uploads"); err != nil {
-		log.Fatalf("Couldn't clear uploads folder: %v", err)
+	st, err := storage.New(*storageDir, parser.Version)
+	if err != nil {
+		log.Fatalf("Couldn't init storage: %v", err)
 	}
-
-	if err := os.MkdirAll("./uploads", os.ModePerm); err != nil {
-		log.Fatalf("Couldn't create uploads folder: %v", err)
+	if err := st.ClearTmp(); err != nil {
+		log.Fatalf("Couldn't clear storage tmp: %v", err)
 	}
 
 	store := jobs.NewStore()
@@ -48,6 +50,16 @@ func main() {
 	defer abortWork()
 
 	pool := jobs.NewPool(store, parser.ParseDemo, *workers, *queueSize, *timeout)
+	// Runs before the job is marked done: once the hash is released from
+	// in-flight, the result is already on disk for the next upload
+	pool.OnSuccess = func(job jobs.Job, res *models.MatchStats) {
+		if job.Hash == "" {
+			return
+		}
+		if err := st.SaveResult(job.Hash, res); err != nil {
+			log.Printf("Couldn't cache result for %s: %v", job.Hash, err)
+		}
+	}
 	pool.Start(workCtx)
 
 	app := fiber.New(fiber.Config{
@@ -65,17 +77,42 @@ func main() {
 			return c.Status(400).JSON(fiber.Map{"error": "Only .dem files are accepted"})
 		}
 
-		savePath := filepath.Join("./uploads", uuid.NewString()+".dem")
+		src, err := file.Open()
+		if err != nil {
+			return c.Status(500).JSON(fiber.Map{"error": "Couldn't read uploaded demo"})
+		}
+		defer func() { _ = src.Close() }()
 
-		if err := c.SaveFile(file, savePath); err != nil {
-			_ = os.Remove(savePath)
+		// One pass over the data: written to disk and hashed at the same time
+		hash, err := st.SaveDemo(src)
+		if err != nil {
+			log.Printf("save demo: %v", err)
 			return c.Status(500).JSON(fiber.Map{"error": "Couldn't save demo locally"})
 		}
 
-		job := store.Create(savePath)
+		// Claim the hash first and only then look in the cache. The pool writes
+		// the result before releasing the hash, so there is no moment where a
+		// finished demo is neither in-flight nor cached
+		job, created := store.CreateOrGet(hash, st.DemoPath(hash))
+		if !created {
+			// Same demo is already queued or being parsed: follow that job
+			return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"job_id": job.ID})
+		}
+
+		res, err := st.LoadResult(hash)
+		if err == nil {
+			store.SetCached(job.ID, res)
+			log.Printf("job %s served from cache (%s)", job.ID, hash)
+			return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"job_id": job.ID, "cached": true})
+		}
+		if !errors.Is(err, storage.ErrNotFound) {
+			// Corrupt or unreadable cache entry: parse again, the new result overwrites it
+			log.Printf("cached result for %s unusable, parsing again: %v", hash, err)
+		}
+
 		if err := pool.Submit(job.ID); err != nil {
+			// The demo stays in storage: it's content-addressed, a retry reuses it
 			store.Delete(job.ID)
-			_ = os.Remove(savePath)
 
 			if errors.Is(err, jobs.ErrShuttingDown) {
 				return c.Status(503).JSON(fiber.Map{"error": "Server is shutting down"})

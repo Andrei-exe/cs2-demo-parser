@@ -20,6 +20,8 @@ type Job struct {
 	Progress   float64            `json:"progress"`
 	Error      string             `json:"error,omitempty"`
 	Result     *models.MatchStats `json:"result,omitempty"`
+	Hash       string             `json:"hash,omitempty"`
+	Cached     bool               `json:"cached,omitempty"`
 	CreatedAt  time.Time          `json:"createdAt"`
 	FinishedAt time.Time          `json:"finishedAt,omitzero"`
 	FilePath   string             `json:"-"`

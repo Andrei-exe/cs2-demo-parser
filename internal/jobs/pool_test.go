@@ -46,19 +46,6 @@ func mustSubmit(t *testing.T, p *Pool, id string) {
 	}
 }
 
-// Polls until the file is gone. The worker deletes it in a defer that runs
-// right after the job is marked done, so it can lag behind the status a bit
-func waitDeleted(path string) bool {
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-			return true
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return false
-}
-
 // Polls the store until the job reaches done/failed or the deadline passes
 func waitFinished(t *testing.T, s *Store, id string) Job {
 	t.Helper()
@@ -83,15 +70,12 @@ func TestPoolProcessesJobs(t *testing.T) {
 	p.Start(ctx)
 
 	var ids []string
-	var paths []string
 	for range 5 {
-		path := tempDemo(t)
-		job := s.Create(path)
+		job := s.Create(tempDemo(t))
 		if err := p.Submit(job.ID); err != nil {
 			t.Fatalf("Submit: %v", err)
 		}
 		ids = append(ids, job.ID)
-		paths = append(paths, path)
 	}
 
 	for i, id := range ids {
@@ -105,9 +89,94 @@ func TestPoolProcessesJobs(t *testing.T) {
 		if j.Result == nil {
 			t.Errorf("job %d: result is nil", i)
 		}
-		if !waitDeleted(paths[i]) {
-			t.Errorf("job %d: demo file was not deleted", i)
+	}
+
+	cancel()
+	p.Wait()
+}
+
+// The demo is content-addressed storage now, the pool must leave it alone
+func TestPoolKeepsDemoFile(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	s := NewStore()
+	p := NewPool(s, okParse, 1, 10, time.Second)
+	p.Start(ctx)
+
+	path := tempDemo(t)
+	job := s.Create(path)
+	mustSubmit(t, p, job.ID)
+	waitFinished(t, s, job.ID)
+
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("demo file is gone after parse: %v", err)
+	}
+
+	cancel()
+	p.Wait()
+}
+
+func TestPoolOnSuccessRunsBeforeDone(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	s := NewStore()
+	p := NewPool(s, okParse, 1, 10, time.Second)
+
+	hash := strings.Repeat("a", 64)
+	var calls int
+	var statusDuringHook Status
+	p.OnSuccess = func(job Job, res *models.MatchStats) {
+		calls++
+		if job.Hash != hash {
+			t.Errorf("hook got hash %q, want %q", job.Hash, hash)
 		}
+		if res == nil {
+			t.Error("hook got nil result")
+		}
+		j, _ := s.Get(job.ID)
+		statusDuringHook = j.Status
+	}
+	p.Start(ctx)
+
+	job, _ := s.CreateOrGet(hash, tempDemo(t))
+	mustSubmit(t, p, job.ID)
+	waitFinished(t, s, job.ID)
+
+	// waitFinished saw "done", which is set after the hook returns, so
+	// reading calls here is ordered after the hook's writes
+	if calls != 1 {
+		t.Errorf("OnSuccess called %d times, want 1", calls)
+	}
+	if statusDuringHook != StatusRunning {
+		t.Errorf("status during hook = %q, want %q", statusDuringHook, StatusRunning)
+	}
+
+	cancel()
+	p.Wait()
+}
+
+func TestPoolOnSuccessSkippedOnFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	s := NewStore()
+	p := NewPool(s, slowParse, 1, 10, 20*time.Millisecond)
+	called := make(chan struct{}, 1)
+	p.OnSuccess = func(Job, *models.MatchStats) { called <- struct{}{} }
+	p.Start(ctx)
+
+	job := s.Create(tempDemo(t))
+	mustSubmit(t, p, job.ID)
+	if j := waitFinished(t, s, job.ID); j.Status != StatusFailed {
+		t.Fatalf("status = %q, want %q", j.Status, StatusFailed)
+	}
+
+	select {
+	case <-called:
+		t.Error("OnSuccess ran for a failed job, failures must not be cached")
+	default:
 	}
 
 	cancel()

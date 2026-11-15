@@ -1,3 +1,6 @@
 demos/
 *.exe
 uploads/
+/storage/
+CLAUDE.md
+.claude/

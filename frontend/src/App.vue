@@ -5,6 +5,7 @@ const API_URL = 'http://localhost:3000'
 
 const selectedFile = ref(null)
 const matchData = ref(null)
+const fromCache = ref(false) // the server already had this demo parsed
 const errorMsg = ref('')
 const sortKey = ref('total_damage')
 
@@ -84,7 +85,9 @@ const followJob = (jobId) => {
     finished = true
     // Close first: EventSource would otherwise reconnect when the server ends the stream
     closeStream()
-    matchData.value = JSON.parse(e.data).result
+    const job = JSON.parse(e.data)
+    fromCache.value = Boolean(job.cached)
+    matchData.value = job.result
     phase.value = 'idle'
   })
 
@@ -107,6 +110,7 @@ const uploadDemo = async () => {
   closeStream()
   errorMsg.value = ''
   matchData.value = null
+  fromCache.value = false
   progress.value = 0
   phase.value = 'uploading'
 
@@ -300,7 +304,16 @@ const winnerSide = computed(() => {
           </div>
         </div>
 
-        <p class="text-xs text-zinc-500">Click a column to sort both teams.</p>
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <p class="text-zinc-500">Click a column to sort both teams.</p>
+          <span
+            v-if="fromCache"
+            class="rounded-full bg-zinc-800 px-2.5 py-0.5 font-medium text-zinc-300 ring-1 ring-inset ring-zinc-700"
+            title="This demo was already parsed, the stats were loaded instantly"
+          >
+            Loaded from cache
+          </span>
+        </div>
 
         <!-- One scoreboard per team -->
         <div

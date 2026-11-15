@@ -12,31 +12,51 @@ type Store struct {
 	mu   sync.RWMutex
 	jobs map[string]*Job
 	subs map[string]map[chan struct{}]struct{}
+	// demo hash -> ID of the queued/running job parsing it, so the same demo
+	// uploaded twice at once is parsed only once
+	inflight map[string]string
 }
 
 func NewStore() *Store {
 	return &Store{
-		jobs: make(map[string]*Job),
-		subs: make(map[string]map[chan struct{}]struct{}),
+		jobs:     make(map[string]*Job),
+		subs:     make(map[string]map[chan struct{}]struct{}),
+		inflight: make(map[string]string),
 	}
 }
 
+// Must be called with s.mu held
+func (s *Store) add(j *Job) Job {
+	j.ID = uuid.NewString()
+	j.CreatedAt = time.Now()
+	s.jobs[j.ID] = j
+	return *j
+}
+
 func (s *Store) Create(filePath string) Job {
-	newID := uuid.New().String()
-
-	newJob := &Job{
-		ID:        newID,
-		Status:    StatusQueued,
-		CreatedAt: time.Now(),
-		FilePath:  filePath,
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.jobs[newID] = newJob
+	return s.add(&Job{Status: StatusQueued, FilePath: filePath})
+}
 
-	return *newJob
+// CreateOrGet returns the job already parsing the demo with this hash, or
+// creates a new queued one. created is false when an existing job was reused.
+// The lookup and the insert happen under the same lock, so two concurrent
+// uploads of the same demo can't both create a job.
+func (s *Store) CreateOrGet(hash, filePath string) (job Job, created bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if id, ok := s.inflight[hash]; ok {
+		if j := s.jobs[id]; j != nil {
+			return *j, false
+		}
+	}
+
+	j := s.add(&Job{Status: StatusQueued, FilePath: filePath, Hash: hash})
+	s.inflight[hash] = j.ID
+	return j, true
 }
 
 func (s *Store) Get(id string) (Job, bool) {
@@ -61,6 +81,9 @@ func (s *Store) Update(id string, fn func(j *Job)) bool {
 	}
 
 	fn(job)
+	if job.Status.IsFinal() {
+		s.release(job)
+	}
 	s.notify(id)
 	return true
 }
@@ -86,9 +109,21 @@ func (s *Store) SetDone(id string, res *models.MatchStats) bool {
 	})
 }
 
+// SetCached finishes a job with a result loaded from the cache instead of
+// a parse. The job never goes through the pool.
+func (s *Store) SetCached(id string, res *models.MatchStats) bool {
+	return s.Update(id, func(j *Job) {
+		j.Status = StatusDone
+		j.Result = res
+		j.Progress = 1
+		j.Cached = true
+		j.FinishedAt = time.Now()
+	})
+}
+
 func (s *Store) SetFailed(id string, err error) bool {
 	return s.Update(id, func(j *Job) {
-		s.jobs[id].Status = StatusFailed
+		j.Status = StatusFailed
 		if err != nil {
 			j.Error = err.Error()
 		}
@@ -100,8 +135,20 @@ func (s *Store) Delete(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if j := s.jobs[id]; j != nil {
+		s.release(j)
+	}
 	delete(s.jobs, id)
 	delete(s.subs, id)
+}
+
+// release frees the job's hash so the next upload of that demo starts a new
+// job (or hits the result cache). Only removes the entry if it still points
+// to this job. Must be called with s.mu held.
+func (s *Store) release(j *Job) {
+	if j.Hash != "" && s.inflight[j.Hash] == j.ID {
+		delete(s.inflight, j.Hash)
+	}
 }
 
 func (s *Store) Subscribe(id string) (<-chan struct{}, func(), bool) {
